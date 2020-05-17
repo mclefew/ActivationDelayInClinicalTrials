@@ -102,6 +102,8 @@ MultisiteTrial <- function(NSimulations
   
   TrialDay <- 0
   RecruitedTotal <- 0
+  SupplyLeftover <- 0
+  RejectedTotal <- 0
   
   
   Trial <- list(NSimulations = NSimulations
@@ -152,6 +154,8 @@ MultisiteTrial <- function(NSimulations
                 
                 , TrialDay = TrialDay
                 , RecruitedTotal = RecruitedTotal
+                , SupplyLeftover = SupplyLeftover
+                , RejectedTotal = RejectedTotal
                 
                 , VerboseSimulation = VerboseSimulation
                 , RandomizationSeed = RandomizationSeed
