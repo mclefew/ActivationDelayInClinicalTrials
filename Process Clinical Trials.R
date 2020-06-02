@@ -33,16 +33,24 @@ ProcessMultisiteTrial.MultisiteTrial <- function(TrialInstance){
     TrialInstance$DepotStates  <- Center_Orders_Update_Depot_Supply(TrialInstance$CenterOrders
                                                                     , TrialInstance$DepotStates
                                                                     , TrialInstance$CenterDepotMapping)
-    TrialInstance$CenterStates <- attend_waiting_patients(TrialInstance$CenterStates)
-    TrialInstance$CenterStates <- update_waiting_patients(TrialInstance$CenterStates)
+    TrialInstance$CenterStates <- attend_waiting_patients(TrialInstance$CenterStates
+                                                          , TrialInstance$DaysPatientsWait
+                                                          , TrialInstance$VerboseSimulation)
+    TrialInstance$CenterStates <- update_waiting_patients(TrialInstance$CenterStates
+                                                          , TrialInstance$DaysPatientsWait
+                                                          , TrialInstance$VerboseSimulation)
     
     
     
     for(center in TrialInstance$Centers){
       
       TrialInstance$CenterStates <- attend_arrivals(center=center
-                                                    , arrivals=ArrivalsByCenter[which(centers==center)]
-                                                    , CenterStates=TrialInstance$CenterStates)
+                                                    , arrivals=ArrivalsByCenter[which(TrialInstance$Centers==center)]
+                                                    , CenterStates=TrialInstance$CenterStates
+                                                    , DaysPatientsWait = TrialInstance$DaysPatientsWait
+                                                    , Randomization = TrialInstance$Randomization
+                                                    , TreatmentSeq = TrialInstance$TreatmentSeq
+                                                    , VerboseSimulation = TrialInstance$VerboseSimulation)
       TrialInstance$RecruitedTotal <- sum(unlist(TrialInstance$CenterStates['recruitment']))  
       
     }
@@ -121,9 +129,9 @@ Depot_Order_Arrivals_Update_Supply <- function(Depot_States,Depot_Orders){
 
 
 
-Update_Depot_Orders <- function(Depot_States,Depot_Orders,Center_States){
+Update_Depot_Orders <- function(Depot_States,Depot_Orders,CenterStates){
   
-  recruitment_by_center <- Center_States[['recruitment']]
+  recruitment_by_center <- CenterStates[['recruitment']]
   
   supply_by_depot <- Depot_States[['supply']]
   manufacture_to_depot <- Depot_States[['manufacture_to_depot']]
@@ -175,7 +183,7 @@ Update_Depot_Orders <- function(Depot_States,Depot_Orders,Center_States){
                                                                 recruited_total=recruited_total,
                                                                 M=N,
                                                                 Ms=centers_in_region[depots==depot],
-                                                                alpha=estimate_alpha(recruited_by_center_total = Center_States$arrivals),
+                                                                alpha=estimate_alpha(recruited_by_center_total = CenterStates$arrivals),
                                                                 tau=trial_day,
                                                                 forward_interval=Depot_States$manufacture_to_depot[[depot]],
                                                                 precision=.0000001,
@@ -225,15 +233,15 @@ Update_Depot_Orders <- function(Depot_States,Depot_Orders,Center_States){
 
 
 
-Update_Center_Orders <- function(Center_States,Center_Orders,Depot_States,center_depot_mapping){
+Update_Center_Orders <- function(CenterStates,Center_Orders,Depot_States,center_depot_mapping){
   
-  supply_by_center <- Center_States[['supply']]
-  waiting_patients <- Center_States[['waiting']]
-  recruitment_by_center <- Center_States[['recruitment']]
-  rejection_by_center <- Center_States[['rejection']]
-  depot_to_center <- Center_States[['depot_to_center']]
-  supply_threshold <- Center_States[['threshold']]
-  center_order_quantity <- Center_States[['order_quantity']]
+  supply_by_center <- CenterStates[['supply']]
+  waiting_patients <- CenterStates[['waiting']]
+  recruitment_by_center <- CenterStates[['recruitment']]
+  rejection_by_center <- CenterStates[['rejection']]
+  depot_to_center <- CenterStates[['depot_to_center']]
+  supply_threshold <- CenterStates[['threshold']]
+  center_order_quantity <- CenterStates[['order_quantity']]
   
   
   supply_by_depot <- Depot_States[['supply']]
@@ -260,8 +268,8 @@ Update_Center_Orders <- function(Center_States,Center_Orders,Depot_States,center
       
       if(drug_available){
         check_depot_supply[['days_waiting']][order_index] <- 0
-        supply_by_depot[[center_drug_to_depot_drug(center_drug)]] <- 
-          supply_by_depot[[center_drug_to_depot_drug(center_drug)]] - check_depot_supply[[
+        supply_by_depot[[center_drug_to_depot_drug(center_drug, center_depot_mapping)]] <- 
+          supply_by_depot[[center_drug_to_depot_drug(center_drug, center_depot_mapping)]] - check_depot_supply[[
             'quantity']][order_index]
       }
     }  
@@ -330,7 +338,7 @@ Update_Center_Orders <- function(Center_States,Center_Orders,Depot_States,center
     New_Orders <- data.frame('center_drug'=center_drug_new_orders,
                              'quantity'=supply_threshold - sapply(center_drug_new_orders
                                                                   , function(center_drug) 
-                                                                    Center_States$supply[[center_drug]]),
+                                                                    CenterStates$supply[[center_drug]]),
                              'days_waiting'= days_waiting_new_orders,
                              'days_to_arrive'=days_to_arrive_new_orders)
   } else{
@@ -406,16 +414,16 @@ Center_Orders_Update_Depot_Supply <- function(Center_Orders,Depot_States, center
 
 
 
-Center_Order_Arrivals_Update_Supply <- function(Center_States,Center_Orders){
-  supply_by_center <- Center_States[['supply']]
-  waiting_patients <- Center_States[['waiting']]
-  recruitment_by_center <- Center_States[['recruitment']]
-  rejection_by_center <- Center_States[['rejection']]
-  depot_to_center <- Center_States[['depot_to_center']]
-  supply_threshold <- Center_States[['threshold']]
-  center_order_quantity <- Center_States[['order_quantity']]
-  center_order_threshold <- Center_States[['threshold']]
-  total_arrivals_by_center <- Center_States[['arrivals']]
+Center_Order_Arrivals_Update_Supply <- function(CenterStates,Center_Orders){
+  supply_by_center <- CenterStates[['supply']]
+  waiting_patients <- CenterStates[['waiting']]
+  recruitment_by_center <- CenterStates[['recruitment']]
+  rejection_by_center <- CenterStates[['rejection']]
+  depot_to_center <- CenterStates[['depot_to_center']]
+  supply_threshold <- CenterStates[['threshold']]
+  center_order_quantity <- CenterStates[['order_quantity']]
+  center_order_threshold <- CenterStates[['threshold']]
+  total_arrivals_by_center <- CenterStates[['arrivals']]
   
   orders_center_drug <- Center_Orders[['center_drug']]
   orders_days_waiting <- Center_Orders[['days_waiting']]
@@ -434,7 +442,7 @@ Center_Order_Arrivals_Update_Supply <- function(Center_States,Center_Orders){
     }
   }
   
-  Updated_Center_States <- list('supply'=supply_by_center,
+  Updated_CenterStates <- list('supply'=supply_by_center,
                                 'waiting'=waiting_patients,
                                 'recruitment'=recruitment_by_center,
                                 'rejection'=rejection_by_center,
@@ -443,36 +451,36 @@ Center_Order_Arrivals_Update_Supply <- function(Center_States,Center_Orders){
                                 'order_quantity'=center_order_quantity,
                                 'arrivals'=total_arrivals_by_center)
   
-  return(Updated_Center_States)
+  return(Updated_CenterStates)
   
 }
 
 
 
-attend_waiting_patients <- function(Center_States){
+attend_waiting_patients <- function(CenterStates, DaysPatientsWait, VerboseSimulation){
   
-  supply_by_center <- Center_States[['supply']]
-  waiting_patients <- Center_States[['waiting']]
-  recruitment_by_center <- Center_States[['recruitment']]
-  rejection_by_center <- Center_States[['rejection']]
-  depot_to_center <- Center_States[['depot_to_center']]
-  supply_threshold <- Center_States[['threshold']]
-  center_order_quantity <- Center_States[['order_quantity']]
-  total_arrivals_by_center <- Center_States[['arrivals']]
+  supply_by_center <- CenterStates[['supply']]
+  waiting_patients <- CenterStates[['waiting']]
+  recruitment_by_center <- CenterStates[['recruitment']]
+  rejection_by_center <- CenterStates[['rejection']]
+  depot_to_center <- CenterStates[['depot_to_center']]
+  supply_threshold <- CenterStates[['threshold']]
+  center_order_quantity <- CenterStates[['order_quantity']]
+  total_arrivals_by_center <- CenterStates[['arrivals']]
   
-  if(days_patients_wait > 0){
+  if(DaysPatientsWait > 0){
     
     for(center_drug in colnames(waiting_patients)){
       center <- strsplit(center_drug,"_")[[1]][1]
       
       while((supply_by_center[center_drug] > 0) & (sum(waiting_patients[center_drug]) >0)){
         
-        patient_cohort <- max(seq(days_patients_wait)[waiting_patients[center_drug] > 0])
+        patient_cohort <- max(seq(DaysPatientsWait)[waiting_patients[center_drug] > 0])
         
         patients_served <- min(c(waiting_patients[[center_drug]][[patient_cohort]],
                                  supply_by_center[[center_drug]]))
         
-        if((patients_served > 0) & sim_verbose){
+        if((patients_served > 0) & VerboseSimulation){
           drug <- drug_from_center_drug(center_drug)
           print(paste(patients_served, "waiting patients taking",
                       drug, " at ", center))
@@ -496,7 +504,7 @@ attend_waiting_patients <- function(Center_States){
               'recruitment'=recruitment_by_center,
               'rejection'=rejection_by_center,
               'depot_to_center'=depot_to_center,
-              'threshold'=center_order_threshold,
+              'threshold'=supply_threshold,
               'order_quantity'=center_order_quantity,
               'arrivals'=total_arrivals_by_center))
   
@@ -504,28 +512,28 @@ attend_waiting_patients <- function(Center_States){
 
 
 
-update_waiting_patients <- function(Center_States){
+update_waiting_patients <- function(CenterStates, DaysPatientsWait, VerboseSimulation){
   
-  supply_by_center <- Center_States[['supply']]
-  waiting_patients <- Center_States[['waiting']]
-  recruitment_by_center <- Center_States[['recruitment']]
-  rejection_by_center <- Center_States[['rejection']]
-  depot_to_center <- Center_States[['depot_to_center']]
-  supply_threshold <- Center_States[['threshold']]
-  center_order_quantity <- Center_States[['order_quantity']]
-  total_arrivals_by_center <- Center_States[['arrivals']]
+  supply_by_center <- CenterStates[['supply']]
+  waiting_patients <- CenterStates[['waiting']]
+  recruitment_by_center <- CenterStates[['recruitment']]
+  rejection_by_center <- CenterStates[['rejection']]
+  depot_to_center <- CenterStates[['depot_to_center']]
+  supply_threshold <- CenterStates[['threshold']]
+  center_order_quantity <- CenterStates[['order_quantity']]
+  total_arrivals_by_center <- CenterStates[['arrivals']]
   
-  if(days_patients_wait > 0){
+  if(DaysPatientsWait > 0){
     
     rejected_today <- sapply(colnames(rejection_by_center),
                              function(center){
                                center_indices <- grepl(center,
                                                        colnames(waiting_patients))
-                               return(sum(waiting_patients[days_patients_wait,
+                               return(sum(waiting_patients[DaysPatientsWait,
                                                            center_indices]))
                              })
     
-    if(sim_verbose == TRUE){  
+    if(VerboseSimulation == TRUE){  
       for( i in seq(length(rejected_today))[rejected_today > 0]){
         print(paste("Rejecting",rejected_today[i],
                     "from",colnames(rejection_by_center)[i]))
@@ -534,8 +542,8 @@ update_waiting_patients <- function(Center_States){
     
     rejection_by_center <- rejection_by_center + rejected_today
     
-    if(days_patients_wait > 1){
-      waiting_patients[seq(2,days_patients_wait),] <- waiting_patients[seq(1,(days_patients_wait-1)),]
+    if(DaysPatientsWait > 1){
+      waiting_patients[seq(2,DaysPatientsWait),] <- waiting_patients[seq(1,(DaysPatientsWait-1)),]
     }
     
     waiting_patients[1,] <- 0
@@ -547,7 +555,72 @@ update_waiting_patients <- function(Center_States){
               'recruitment'=recruitment_by_center,
               'rejection'=rejection_by_center,
               'depot_to_center'=depot_to_center,
-              'threshold'=center_order_threshold,
+              'threshold'=supply_threshold,
+              'order_quantity'=center_order_quantity,
+              'arrivals'=total_arrivals_by_center))
+  
+}
+
+
+
+attend_arrivals <- function(center,arrivals, CenterStates, DaysPatientsWait, Randomization, TreatmentSeq, VerboseSimulation){
+  
+  supply_by_center <- CenterStates[['supply']]
+  waiting_patients <- CenterStates[['waiting']]
+  recruitment_by_center <- CenterStates[['recruitment']]
+  rejection_by_center <- CenterStates[['rejection']]
+  depot_to_center <- CenterStates[['depot_to_center']]
+  supply_threshold <- CenterStates[['threshold']]
+  center_order_quantity <- CenterStates[['order_quantity']]
+  total_arrivals_by_center <- CenterStates[['arrivals']]
+  
+  if(arrivals > 0){
+    
+    if(VerboseSimulation){
+      print(paste(arrivals,"Arriving to",center))
+    }
+    
+    total_arrivals_by_center[center] <- total_arrivals_by_center[center] + arrivals
+    
+    
+    for(patient in seq(arrivals)){
+      
+      recruited_total <- sum(recruitment_by_center)
+      if(Randomization == "center_unstratified"){
+        drugid <- TreatmentSeq[recruited_total + 1]
+      } else if(Randomization == "center_stratified"){
+        drugid <- TreatmentSeq[[center]][total_arrivals_by_center[[center]]]
+      }
+      center_drug <- paste0(center,"_drug",drugid)
+      
+      patient_served <- supply_by_center[center_drug] > 0
+      
+      if(patient_served){
+        supply_by_center[center_drug] <- supply_by_center[center_drug] - 1
+        recruitment_by_center[center] <- recruitment_by_center[center] + 1
+        if(VerboseSimulation){
+          print(paste("Arrival Taking Drug",drugid,
+                      "at",center_from_center_drug(center_drug)))
+        }
+      } else{
+        if(DaysPatientsWait > 0){
+          waiting_patients[center_drug][1,1] <- waiting_patients[center_drug][1,1] + 1
+        } else{
+          rejection_by_center[center] <- rejection_by_center[center] + 1
+        }
+        
+      }
+      
+      
+    }
+  }
+  
+  return(list('supply'=supply_by_center,
+              'waiting'=waiting_patients,
+              'recruitment'=recruitment_by_center,
+              'rejection'=rejection_by_center,
+              'depot_to_center'=depot_to_center,
+              'threshold'=supply_threshold,
               'order_quantity'=center_order_quantity,
               'arrivals'=total_arrivals_by_center))
   
