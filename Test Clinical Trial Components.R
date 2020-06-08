@@ -3,18 +3,19 @@ package_folder <- "C:\\Users\\mclef\\Documents\\Research\\Clinical Trials\\Packa
 initiate_trials_file <- "Initiate Clinical Trials.R"
 trial_operations_file <- "Process Clinical Trials.R"
 trial_statistics_file <- "Clinical Trial Statistical Models.R"
+trial_reporting_file <- "Report Clinical Trials.R"
 
 initiate_trials_path <- paste0(package_folder, "\\", initiate_trials_file)
 trial_operations_path <- paste0(package_folder, "\\", trial_operations_file)
 trial_statistics_path <- paste0(package_folder, "\\", trial_statistics_file)
+trial_reporting_path <- paste0(package_folder, "\\", trial_reporting_file)
 
 source(initiate_trials_path)
 source(trial_operations_path)
 source(trial_statistics_path)
+source(trial_reporting_path)
 
-Trial_1 <- MultisiteTrial(NSimulations = 10
-                          
-                          , RecruiteTarget = 600
+Trial_1 <- MultisiteTrial(RecruiteTarget = 600
                           
                           , Randomization = "center_unstratified"
                           , BlockLength = 4
@@ -59,3 +60,4 @@ print(Trial_1)
 
 
 Trial_1_Processed <- ProcessMultisiteTrial.MultisiteTrial(Trial_1)
+Trial_1_Results <- ReportMultisiteTrial.MultisiteTrial(Trial_1_Processed)
