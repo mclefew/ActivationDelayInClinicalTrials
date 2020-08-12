@@ -1,0 +1,180 @@
+---
+title: "Distribution of Cohort Recruitment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+
+```
+
+## Distribution of Cohort Recruitment
+
+1. Assume the Poisson-Gamma model of recruitment, such that recruitment at each site, $i$, follows a Poisson distribution with rate parameter $\lambda_i$ drawn from a Gamma distribution.
+
+
+2. Let $I_t$ be the number of sites initialized at time $t$. Assume time required to establish a site, $s_i$, is randomly distributed, and expected time required to establish a site, $E[s_i]$, is a function of the number of sites initialized in the cohort, $f(I_t)$.
+
+3. Assume also that time to establish a site and the rate parameter of recruitment for the site are independent.
+
+4. It was found by derivation that the expected value of recruitment for a cohort would be:
+
+I_0 \frac{\alpha}{\beta} F_s(t) \left[ t - E[s_i] + E[s_i | s_i > t] \right]
+
+
+5. It was found by derviation that the variance of recruitment for a cohort would bbe:
+
+I_0 \frac{\alpha}{\beta} \left[ t F_s(t) - E[s_i] + (1-F_s(t))E[s_i | s_i > t] \right] 
+
+6. Letting establishment time be distributed exponential with rate parameter \lambda_{I_0}:
+
+F_s(t) = 1-e^{-\lambda_{I_0} t}
+E[s_i] = 1/\lambda_{I_0}
+E[s_i|s_i > t] = 1/\lambda_{I_0} + t
+E[s_i^2] = 2/\lambda_{I_0}^2
+E[s_i^2 | s_i > t] = 2/\lambda_{I_0}^2 + 2t/\lambda_{I_0} + t^2
+
+7. We then have expected value of recruitment for the cohort:
+
+I_0 \frac{\alpha}{\beta} \left[ t (1-e^{-\lambda_{I_0} t}) - E[s_i] + (e^{-\lambda_{I_0} t})(1/\lambda_{I_0} + t) \right]
+
+
+
+```{r expected value function, include=TRUE}
+
+expected_recruitment_cohort <- function(I_0, alpha, beta, lambda_I_0, t){
+  
+  expected_recruitment <- I_0 * alpha / beta * t * (1-exp(-lambda_I_0 * t)) -
+                          I_0 * alpha / beta * (1 / lambda_I_0) + 
+                          I_0 * alpha / beta * exp(-lambda_I_0 * t) * (1/lambda_I_0 + t)
+
+  return(expected_recruitment)
+  
+}
+
+```
+
+
+```{r simulation function, include=True}
+
+simulate_cohort_return <- function(I_0, alpha, beta, lambda_I_0, t, n_sims){
+  
+  establishment_times <- rexp(n=I_0 * n_sims, rate=lambda_I_0)
+  
+  recruitment_rates <- rgamma(n=I_0 * n_sims, shape=alpha, rate=beta)
+  
+  recruitment_period_lengths <- t - establishment_times
+  
+  recruitment_period_lengths[recruitment_period_lengths < 0] = 0
+  
+  site_recruitment <- rpois(n=I_0 * n_sims, lambda = recruitment_period_lengths * recruitment_rates)
+  
+  site_recruitment_by_cohort <- split(site_recruitment, rep(c(1:n_sims),I_0))
+  
+  total_recruitment_by_cohort <- unlist(lapply(site_recruitment_by_cohort, function(x) sum(x)))
+  
+  return(total_recruitment_by_cohort)
+  
+}
+
+```
+
+
+
+```{r perform_simulation, include=True}
+
+expected_recruitment_by_cohort_1 <- expected_recruitment_cohort(I_0 = 100, alpha = 2, beta = 2/5
+                                                                , lambda_I_0 = 1/30, t = 240)
+
+
+total_recruitment_by_cohort_1 <- simulate_cohort_return(I_0 = 100, alpha = 2, beta = 2/5
+                                                        , lambda_I_0 = 1/30, t = 240, n_sim=1000000)
+
+mean_recruitment_by_cohort_1 <- mean(total_recruitment_by_cohort_1)
+
+
+
+total_recruitment_by_cohort_2 <- simulate_cohort_return(I_0 = 100, alpha = 2, beta = 2/5
+                                                        , lambda_I_0 = 1/30, t = 240, n_sim=1000000)
+
+mean_recruitment_by_cohort_2 <- mean(total_recruitment_by_cohort_2)
+
+
+
+total_recruitment_by_cohort_3 <- simulate_cohort_return(I_0 = 100, alpha = 2, beta = 2/5
+                                                        , lambda_I_0 = 1/30, t = 240, n_sim=1000000)
+
+mean_recruitment_by_cohort_3 <- mean(total_recruitment_by_cohort_3)
+
+
+```
+
+
+
+
+```{r perform_simulation_mult_params, include=True}
+
+results_df <- data.frame()
+
+result_cols <- c("Sites in Cohort","Alpha","Beta","Mean Establishment Time Days","Trial Length Days","Expected Recruitment","Simulation 1 Mean","Simulation 2 Mean","Simulation 3 Mean","Simulations Performed")
+
+
+I_0_levels <- c(50, 100)
+alpha_levels <- c(2,4)
+beta_levels <- c(1/5, 2/5)
+lambda_I_0_levels <- c(1/30, 1/60)
+t_levels <- c(120, 240)
+n_sims_level <- 1000000
+
+for (I_0_level in I_0_levels){
+  
+  for (alpha_level in alpha_levels){
+    
+    for(beta_level in beta_levels){
+      
+      for(lambda_I_0_level in lambda_I_0_levels){
+        
+        for (t_level in t_levels){
+          
+          results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+          colnames(results_newline) <- result_cols
+    
+        
+          results_newline[["Sites in Cohort"]] <- I_0_level
+          results_newline[["Alpha"]] <- alpha_level
+          results_newline[["Beta"]] <- beta_level
+          results_newline[["Mean Establishment Time Days"]] <- 1 / lambda_I_0_level
+          results_newline[["Trial Length Days"]] <- t_level
+          results_newline[["Expected Recruitment"]] <- expected_recruitment_cohort(
+                                                          I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, lambda_I_0 = lambda_I_0_level,
+                                                          t = t_level)
+          results_newline[["Simulation 1 Mean"]] <- mean(simulate_cohort_return(
+                                                          I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, lambda_I_0 = lambda_I_0_level,
+                                                          t = t_level, n_sims = n_sims_level))
+          results_newline[["Simulation 2 Mean"]] <- mean(simulate_cohort_return(
+                                                          I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, lambda_I_0 = lambda_I_0_level,
+                                                          t = t_level, n_sims = n_sims_level))
+          results_newline[["Simulation 3 Mean"]] <- mean(simulate_cohort_return(
+                                                          I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, lambda_I_0 = lambda_I_0_level,
+                                                          t = t_level, n_sims = n_sims_level))
+          
+          results_newline[["Simulations Performed"]] <- n_sims_level
+          
+          results_df <- rbind(results_df,results_newline)
+          
+          
+        }
+      }
+    }
+  }
+}
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_1.csv",row.names=FALSE)
+
+```
