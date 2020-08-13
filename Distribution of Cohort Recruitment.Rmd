@@ -18,19 +18,16 @@ output: html_document
 I_0 \frac{\alpha}{\beta} F_s(t) \left[ t - E[s_i] + E[s_i | s_i > t] \right]
 
 
-5. It was found by derviation that the variance of recruitment for a cohort would be:
+5. It was found by derivation that the variance of recruitment for a cohort would be:
 
-I_0 \frac{\alpha}{\beta} \left[ t F_s(t) - E[s_i] + (1-F_s(t))E[s_i | s_i > t] \right] 
+I_0 [\mu - \mu^2] 
++ I_0 \frac{\alpha + \alpha^2}{\beta^2} 
+  [ t^2 F_s(t) - 2 t E[s_i] + 2 t (1-F_s(t))E[s_i|s_i > t] + E[s_i^2] - (1-F_s(t))E[s_i^2 | s_i > t] ]
 
-
-6. It was found by derivation that the variance of recruitment for a cohort would be:
-
-I_0 \frac{\alpha}{\beta} \left[ t F_s(t) - E[s_i] + (1-F_s(t))E[s_i | s_i > t] \right]
-+ I_0 \frac{\alpha+\alpha^2}{\beta^2} \left[ t^2 F_s(t) - 2 t E[s_i] + 2t(1-F_s(t))E[s_i | s_i > t] + E[s_i^2] - (1-F_s(t))E[s_i^2 | s_i > t]  \right] 
-- I_0 \frac{\alpha^2}{\beta^2} \left[ t F_s(t) - E[s_i] + (1-F_s(t))E[s_i | s_i > t] \right]^2
+where \mu is the expected value of recruitment.
 
 
-7. Letting establishment time be distributed exponential with rate parameter \lambda_{I_0}:
+6. Letting establishment time be distributed exponential with rate parameter \lambda_{I_0}:
 
 F_s(t) = 1-e^{-\lambda_{I_0} t}
 E[s_i] = 1/\lambda_{I_0}
@@ -38,26 +35,20 @@ E[s_i|s_i > t] = 1/\lambda_{I_0} + t
 E[s_i^2] = 2/\lambda_{I_0}^2
 E[s_i^2 | s_i > t] = 2/\lambda_{I_0}^2 + 2t/\lambda_{I_0} + t^2
 
-8. We then have expected value of recruitment for the cohort:
+7. We then have expected value of recruitment for the cohort:
 
 I_0 \frac{\alpha}{\beta} \left[ t (1-e^{-\lambda_{I_0} t}) - E[s_i] + (e^{-\lambda_{I_0} t})(1/\lambda_{I_0} + t) \right]
 
 
-9. We then have variance of recruitment for the cohort:
+8. We then have variance of recruitment for the cohort:
 
-I_0 \frac{\alpha}{\beta} [ t (1-e^{-\lambda_{I_0} t}) 
-                           - (1/\lambda_{I_0}) 
-                           + (e^{-\lambda_{I_0} t})(1/\lambda_{I_0} + t) ]
-                           
-+ I_0 \frac{\alpha+\alpha^2}{\beta^2} [ t^2 (1-e^{-\lambda_{I_0} t}) ^2 
-                                        - 2 t (1/\lambda_{I_0}) 
-                                        + 2t(e^{-\lambda_{I_0} t})(1/\lambda_{I_0} + t)
-                                        + (2/\lambda_{I_0}^2)
-                                        - (e^{-\lambda_{I_0} t})(2/\lambda_{I_0}^2 + 2t/\lambda_{I_0} + t^2) ] 
-                                        
-- I_0 \frac{\alpha^2}{\beta^2} [ t (1-e^{-\lambda_{I_0} t}) 
-                                 - (1/\lambda_{I_0})
-                                 + (e^{-\lambda_{I_0} t}) (1/\lambda_{I_0} + t) ]^2
+I_0 [\mu - \mu^2] 
++ I_0 \frac{\alpha + \alpha^2}{\beta^2} 
+  [ t^2 (1-e^{-\lambda_{I_0} t}) 
+    - 2 t (1/\lambda_{I_0}) 
+    + 2 t (e^{-\lambda_{I_0} t})(1/\lambda_{I_0} + t) 
+    + (2/\lambda_{I_0}^2) 
+    - (e^{-\lambda_{I_0} t})(2/\lambda_{I_0}^2 + 2t/\lambda_{I_0} + t^2) ]
 
 ```{r expected value function, include=TRUE}
 
@@ -78,23 +69,20 @@ expected_recruitment_cohort <- function(I_0, alpha, beta, lambda_I_0, t){
 
 variance_recruitment_cohort <- function(I_0, alpha, beta, lambda_I_0, t){
   
-  variance_component_1 <- t * (1-exp(-lambda_I_0 * t)) -
-                           (1 / lambda_I_0) +
-                           exp(-lambda_I_0 * t) * (1/lambda_I_0 + t)
   
-  variance_component_2 <- t^2 * (1-exp(-lambda_I_0 * t)) ^2 -
-                            2 * t * (1 / lambda_I_0) + 
-                            2 * t * exp(-lambda_I_0 * t) * (1/lambda_I_0 + t) +
-                            2 / (lambda_I_0^2) -
-                            exp(-lambda_I_0 * t) * (2/(lambda_I_0^2) + 2*t/lambda_I_0 + t^2)
+  mu <- expected_recruitment_cohort(I_0=I_0, alpha=alpha, 
+                                     beta=beta, lambda_I_0=lambda_I_0,
+                                     t=t) / I_0
+
   
-  variance_component_3 <- t * (1-exp(-lambda_I_0 * t)) - 
-                            (1 / lambda_I_0) + 
-                            exp(-lambda_I_0 * t) * (1/lambda_I_0 + t)
   
-  variance_recruitment <- I_0 * alpha / beta * variance_component_1 +
-                          I_0 * (alpha + alpha^2) / (beta^2) * variance_component_2 -
-                          I_0 * (alpha^2) / (beta^2) * (variance_component_3^2)
+  variance_recruitment <-I_0 * (mu - mu^2) + 
+                          I_0 * (alpha + alpha^2) / (beta^2) * 
+                        ( t^2 * (1-exp(-lambda_I_0 * t))
+                          - 2 * t * (1 / lambda_I_0)
+                          + 2 * t * exp(-lambda_I_0 * t) * (1/lambda_I_0 + t)
+                          + (2/lambda_I_0^2) 
+                          - exp(-lambda_I_0 * t) * (2/lambda_I_0^2 + 2*t/lambda_I_0 + t^2) )
   
   
   return(variance_recruitment)
@@ -178,8 +166,9 @@ result_cols <- c("Sites in Cohort"
                  ,"Beta"
                  ,"Mean Establishment Time Days"
                  ,"Trial Length Days"
-                 ,"Expected Recruitment","Standard Deviation of Recruitment"
+                 ,"Expected Recruitment"
                  ,"Simulation 1 Mean","Simulation 2 Mean","Simulation 3 Mean"
+                 ,"Standard Deviation of Recruitment"
                  ,"Simulation 1 Standard Deviation"
                  ,"Simulation 2 Standard Deviation","Simulation 3 Standard Deviation"
                  ,"Simulations Performed")
@@ -253,6 +242,6 @@ for (I_0_level in I_0_levels){
   }
 }
 
-write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_2.csv",row.names=FALSE)
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_3.csv",row.names=FALSE)
 
 ```
