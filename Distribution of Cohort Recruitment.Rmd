@@ -50,6 +50,13 @@ I_0 [\mu - \mu^2]
     + (2/\lambda_{I_0}^2) 
     - (e^{-\lambda_{I_0} t})(2/\lambda_{I_0}^2 + 2t/\lambda_{I_0} + t^2) ]
 
+```{r import libraries, include=TRUE}
+
+library(ggplot2)
+
+```
+
+
 ```{r expected value function, include=TRUE}
 
 expected_recruitment_cohort <- function(I_0, alpha, beta, lambda_I_0, t){
@@ -243,5 +250,661 @@ for (I_0_level in I_0_levels){
 }
 
 write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_3.csv",row.names=FALSE)
+
+```
+
+
+
+```{r expected establishment vs cohort size, include=True}
+
+#testing that lambda_I_0 is set as intended
+#should have mean establishment time increase 1 week for every 5 sites
+
+I_0_levels <- c(1:100) * 5
+
+n_sims_level <- 100000
+
+results_df <- data.frame()
+result_cols <- c("Sites in Cohort","Sets of 5 Sites in Cohort","Mean Establishment Time in Weeks")
+
+for(I_0_level in I_0_levels){
+  
+  lambda_I_0_level <- 5 / 7 / I_0_level
+  
+  establishment_times <- rexp(n=n_sims_level, rate=lambda_I_0_level)
+  
+  mean_establishment_time <- mean(establishment_times)
+  
+  results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+  colnames(results_newline) <- result_cols
+  
+  results_newline[["Sites in Cohort"]] <- I_0_level
+  results_newline[["Sets of 5 Sites in Cohort"]] <- I_0_level / 5
+  results_newline[["Mean Establishment Time in Weeks"]] <- mean_establishment_time / 7
+  
+  results_df <- rbind(results_df,results_newline)
+  
+}
+
+
+
+```
+
+
+```{r expected recruitment vs cohort size, include=True}
+
+I_0_levels <- c(1:100) * 5
+
+results_df <- data.frame()
+result_cols <- c("Length_of_Trial_in_Weeks","Sites_in_Cohort",
+                 "Sets_of_5_Sites_in_Cohort","Mean_Establishment_Time_in_Weeks",
+                 "Expected_Recruitment","Standard_Deviation_of_Recruitment",
+                 "Mean_Simulated_Recruitment","Standard_Deviation_of_Simulated_Recruitment")
+
+t_levels <- c(1:10) * 14
+
+alpha_level <- 1
+beta_level <- 1
+
+n_sims_level <- 100
+
+for(t_level in t_levels){
+  
+  for(I_0_level in I_0_levels){
+    
+    lambda_I_0_level <- 5 / 7 / I_0_level
+    
+    expected_recruitment <- expected_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    variance_recruitment <- variance_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    simulated_recruitment <- simulate_cohort_return(I_0 = I_0_level, alpha = alpha_level,
+                                                      beta = beta_level, lambda_I_0 = lambda_I_0_level,
+                                                      t = t_level, n_sims = n_sims_level)
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Sites_in_Cohort"]] <- I_0_level
+    results_newline[["Sets_of_5_Sites_in_Cohort"]] <- I_0_level / 5
+    results_newline[["Mean_Establishment_Time_in_Weeks"]] <- 1 / lambda_I_0_level
+    results_newline[["Expected_Recruitment"]] <- expected_recruitment
+    results_newline[["Standard_Deviation_of_Recruitment"]] <- sqrt(variance_recruitment)
+    results_newline[["Lower_Bound_of_Recruitment"]] <- expected_recruitment - 2 * sqrt(variance_recruitment)
+    results_newline[["Upper_Bound_of_Recruitment"]] <- expected_recruitment + 2 * sqrt(variance_recruitment)
+    results_newline[["Mean_Simulated_Recruitment"]] <- mean(simulated_recruitment)
+    results_newline[["Standard_Deviation_of_Simulated_Recruitment"]] <- sqrt(var(simulated_recruitment))
+    
+    
+    results_df <- rbind(results_df,results_newline)
+    
+  }
+  
+}
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_4.csv",row.names=FALSE)
+
+
+```
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Lower_Bound_of_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Upper_Bound_of_Recruitment, group=1)) +
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment with 95% Confidence Bounds") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks")
+
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_4.png")
+
+
+```
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Mean_Simulated_Recruitment, group=1)) +
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks - Expected and Simulated")
+
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_4b.png")
+
+
+```
+
+
+```{r expected recruitment vs cohort size, include=True}
+
+I_0_levels <- c(1:100) * 500
+
+results_df <- data.frame()
+
+result_cols <- c("Length_of_Trial_in_Weeks","Sites_in_Cohort",
+                 "Sets_of_5_Sites_in_Cohort","Mean_Establishment_Time_in_Weeks",
+                 "Expected_Recruitment","Standard_Deviation_of_Recruitment",
+                 "Lower_Bound_of_Recruitment","Upper_Bound_of_Recruitment")
+
+t_levels <- c(1:10) * 14
+
+alpha_level <- 1
+beta_level <- 1
+
+n_sims_level <- 100
+
+for(t_level in t_levels){
+  
+  for(I_0_level in I_0_levels){
+    
+    lambda_I_0_level <- 5 / 7 / I_0_level
+    
+    expected_recruitment <- expected_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    variance_recruitment <- variance_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Sites_in_Cohort"]] <- I_0_level
+    results_newline[["Sets_of_5_Sites_in_Cohort"]] <- I_0_level / 5
+    results_newline[["Mean_Establishment_Time_in_Weeks"]] <- 1 / lambda_I_0_level
+    results_newline[["Expected_Recruitment"]] <- expected_recruitment
+    results_newline[["Standard_Deviation_of_Recruitment"]] <- sqrt(variance_recruitment)
+    results_newline[["Lower_Bound_of_Recruitment"]] <- expected_recruitment - 2 * sqrt(variance_recruitment)
+    results_newline[["Upper_Bound_of_Recruitment"]] <- expected_recruitment + 2 * sqrt(variance_recruitment)
+    
+    results_df <- rbind(results_df,results_newline)
+    
+  }
+  
+}
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_5.csv",row.names=FALSE)
+
+
+```
+
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Lower_Bound_of_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Upper_Bound_of_Recruitment, group=1)) +
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment with 95% Confidence Bounds") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks")
+
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_5.png")
+
+
+```
+
+
+
+```{r simulate with nonlinear increase in activation time, include=True}
+
+I_0_levels <- c(1:100) * 500
+
+results_df <- data.frame()
+
+result_cols <- c("Length_of_Trial_in_Weeks","Sites_in_Cohort",
+                 "Sets_of_5_Sites_in_Cohort","Mean_Establishment_Time_in_Weeks",
+                 "Expected_Recruitment","Standard_Deviation_of_Recruitment",
+                 "Lower_Bound_of_Recruitment","Upper_Bound_of_Recruitment")
+
+t_levels <- c(1:10) * 14
+
+alpha_level <- 1
+beta_level <- 1
+
+n_sims_level <- 100
+
+for(t_level in t_levels){
+  
+  for(I_0_level in I_0_levels){
+    
+    lambda_I_0_level <- 5 / 7 / (I_0_level^1.2)
+    
+    expected_recruitment <- expected_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    variance_recruitment <- variance_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Sites_in_Cohort"]] <- I_0_level
+    results_newline[["Sets_of_5_Sites_in_Cohort"]] <- I_0_level / 5
+    results_newline[["Mean_Establishment_Time_in_Weeks"]] <- 1 / lambda_I_0_level
+    results_newline[["Expected_Recruitment"]] <- expected_recruitment
+    results_newline[["Standard_Deviation_of_Recruitment"]] <- sqrt(variance_recruitment)
+    results_newline[["Lower_Bound_of_Recruitment"]] <- expected_recruitment - 2 * sqrt(variance_recruitment)
+    results_newline[["Upper_Bound_of_Recruitment"]] <- expected_recruitment + 2 * sqrt(variance_recruitment)
+    
+    results_df <- rbind(results_df,results_newline)
+    
+  }
+  
+}
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_6.csv",row.names=FALSE)
+
+
+```
+
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Lower_Bound_of_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Upper_Bound_of_Recruitment, group=1)) +
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment with 95% Confidence Bounds") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks")
+
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_6.png")
+
+
+```
+
+
+```{r simulate with nonlinear increase in activation time, include=True}
+
+I_0_levels <- c(1:100) * 500
+
+results_df <- data.frame()
+
+result_cols <- c("Length_of_Trial_in_Weeks","Sites_in_Cohort",
+                 "Sets_of_5_Sites_in_Cohort","Mean_Establishment_Time_in_Weeks",
+                 "Expected_Recruitment","Standard_Deviation_of_Recruitment",
+                 "Lower_Bound_of_Recruitment","Upper_Bound_of_Recruitment")
+
+t_levels <- c(1:10) * 14
+
+alpha_level <- 1
+beta_level <- 1
+
+n_sims_level <- 100
+
+for(t_level in t_levels){
+  
+  for(I_0_level in I_0_levels){
+    
+    lambda_I_0_level <- 5 / 7 / (I_0_level^.8)
+    
+    expected_recruitment <- expected_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    variance_recruitment <- variance_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Sites_in_Cohort"]] <- I_0_level
+    results_newline[["Sets_of_5_Sites_in_Cohort"]] <- I_0_level / 5
+    results_newline[["Mean_Establishment_Time_in_Weeks"]] <- 1 / lambda_I_0_level
+    results_newline[["Expected_Recruitment"]] <- expected_recruitment
+    results_newline[["Standard_Deviation_of_Recruitment"]] <- sqrt(variance_recruitment)
+    results_newline[["Lower_Bound_of_Recruitment"]] <- expected_recruitment - 2 * sqrt(variance_recruitment)
+    results_newline[["Upper_Bound_of_Recruitment"]] <- expected_recruitment + 2 * sqrt(variance_recruitment)
+    
+    results_df <- rbind(results_df,results_newline)
+    
+  }
+  
+}
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_7.csv",row.names=FALSE)
+
+
+```
+
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Lower_Bound_of_Recruitment, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Upper_Bound_of_Recruitment, group=1)) +
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment with 95% Confidence Bounds") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks")
+
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_7.png")
+
+
+```
+
+
+```{r get anticipated recruitment with and without accounting for random initialization, include=True}
+
+poisson_gamma_expected_value <- function(I_0, alpha, beta, t){
+  
+  return( (alpha * I_0 * t) / (beta) )
+  
+}
+
+poisson_gamma_variance <- function(I_0, alpha, beta, t){
+  
+  return( ( (alpha * I_0 * t) / beta) + ( (alpha * I_0 * t^2) / beta^2) )
+  
+}
+
+
+simulate_poisson_gamma_return <- function(I_0, alpha, beta, t, n_sims){
+  
+  establishment_times <- 0
+  
+  recruitment_rates <- rgamma(n=I_0 * n_sims, shape=alpha, rate=beta)
+  
+  recruitment_period_lengths <- t - establishment_times
+  
+  recruitment_period_lengths[recruitment_period_lengths < 0] = 0
+  
+  site_recruitment <- rpois(n=I_0 * n_sims, lambda = recruitment_period_lengths * recruitment_rates)
+  
+  site_recruitment_by_cohort <- split(site_recruitment, rep(c(1:n_sims),I_0))
+  
+  total_recruitment_by_cohort <- unlist(lapply(site_recruitment_by_cohort, function(x) sum(x)))
+  
+  return(total_recruitment_by_cohort)
+  
+}
+
+
+```
+
+
+
+```{r test poisson-gamma formula against simulation, include=True}
+
+
+results_df <- data.frame()
+
+result_cols <- c("Sites in Cohort"
+                 ,"Alpha"
+                 ,"Beta"
+                 ,"Mean Establishment Time Days"
+                 ,"Trial Length Days"
+                 ,"Expected Recruitment"
+                 ,"Simulation 1 Mean","Simulation 2 Mean","Simulation 3 Mean"
+                 ,"Standard Deviation of Recruitment"
+                 ,"Simulation 1 Standard Deviation"
+                 ,"Simulation 2 Standard Deviation","Simulation 3 Standard Deviation"
+                 ,"Simulations Performed")
+
+
+I_0_levels <- c(50, 100)
+alpha_levels <- c(2,4)
+beta_levels <- c(1/5, 2/5)
+lambda_I_0_levels <- c(1/30, 1/60)
+t_levels <- c(120, 240)
+n_sims_level <- 100000
+
+for (I_0_level in I_0_levels){
+  
+  for (alpha_level in alpha_levels){
+    
+    for(beta_level in beta_levels){
+      
+      for(lambda_I_0_level in lambda_I_0_levels){
+        
+        for (t_level in t_levels){
+          
+          
+          simulation_1_totals <- simulate_poisson_gamma_return(I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, 
+                                                          t = t_level, n_sims = n_sims_level)
+          
+          simulation_2_totals <- simulate_poisson_gamma_return(I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, 
+                                                          t = t_level, n_sims = n_sims_level)
+            
+          simulation_3_totals <- simulate_poisson_gamma_return(I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, 
+                                                          t = t_level, n_sims = n_sims_level)
+          
+          results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+          colnames(results_newline) <- result_cols
+    
+        
+          results_newline[["Sites in Cohort"]] <- I_0_level
+          results_newline[["Alpha"]] <- alpha_level
+          results_newline[["Beta"]] <- beta_level
+          results_newline[["Mean Establishment Time Days"]] <- 1 / lambda_I_0_level
+          results_newline[["Trial Length Days"]] <- t_level
+          
+          results_newline[["Expected Recruitment"]] <- poisson_gamma_expected_value(
+                                                          I_0 = I_0_level, alpha = alpha_level,
+                                                          beta = beta_level, t = t_level)
+          results_newline[["Standard Deviation of Recruitment"]] <- sqrt(poisson_gamma_variance(
+                                                            I_0 = I_0_level, alpha = alpha_level,
+                                                            beta = beta_level, t = t_level))
+          
+          results_newline[["Simulation 1 Mean"]] <- mean(simulation_1_totals)
+          results_newline[["Simulation 2 Mean"]] <- mean(simulation_2_totals)
+          results_newline[["Simulation 3 Mean"]] <- mean(simulation_3_totals)
+          
+          results_newline[["Simulation 1 Standard Deviation"]] <- sqrt(var(simulation_1_totals))
+          results_newline[["Simulation 2 Standard Deviation"]] <- sqrt(var(simulation_2_totals))
+          results_newline[["Simulation 3 Standard Deviation"]] <- sqrt(var(simulation_3_totals))
+          
+          results_newline[["Simulations Performed"]] <- n_sims_level
+          
+          results_df <- rbind(results_df,results_newline)
+          
+          
+        }
+      }
+    }
+  }
+}
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/test poisson gamma.csv",row.names=FALSE)
+
+
+```
+
+```
+
+
+
+
+```{r simulate with nonlinear increase in activation time, include=True}
+
+I_0_levels <- c(1:100) * 2
+
+results_df <- data.frame()
+
+result_cols <- c("Length_of_Trial_in_Weeks","Sites_in_Cohort",
+                 "Sets_of_5_Sites_in_Cohort","Mean_Establishment_Time_in_Weeks",
+                 
+                 "Expected_Recruitment_RE","Standard_Deviation_of_Recruitment_RE",
+                 "Lower_Bound_of_Recruitment_RE","Upper_Bound_of_Recruitment_RE",
+                 
+                 "Expected_Recruitment_N1","Standard_Deviation_of_Recruitment_N1",
+                 "Lower_Bound_of_Recruitment_N1","Upper_Bound_of_Recruitment_N1",
+                 
+                 "Expected_Recruitment_N2","Standard_Deviation_of_Recruitment_N2",
+                 "Lower_Bound_of_Recruitment_N2","Upper_Bound_of_Recruitment_N2")
+
+t_levels <- c(1:10) * 14
+
+alpha_level <- 1
+beta_level <- 1
+
+lambda_I_0_naive <- 5 / 7 / (20)
+
+for(t_level in t_levels){
+  
+  for(I_0_level in I_0_levels){
+    
+    lambda_I_0_level <- 5 / 7 / (I_0_level)
+    
+    
+    
+    expected_recruitment_re <- expected_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+    
+    variance_recruitment_re <- variance_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_level,
+                                                      t=t_level)
+
+    
+    
+    expected_recruitment_n1 <- poisson_gamma_expected_value(I_0=I_0_level, alpha=alpha_level,
+                                                            beta=beta_level, t=t_level)
+    
+    variance_recruitment_n1 <- poisson_gamma_variance(I_0=I_0_level, alpha=alpha_level,
+                                                      beta=beta_level, t=t_level)
+    
+    
+    
+    
+    expected_recruitment_n2 <- expected_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_naive,
+                                                      t=t_level)
+    
+    variance_recruitment_n2 <- variance_recruitment_cohort(I_0=I_0_level,alpha=alpha_level,beta=beta_level,
+                                                      lambda_I_0 = lambda_I_0_naive,
+                                                      t=t_level)
+    
+    
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Sites_in_Cohort"]] <- I_0_level
+    results_newline[["Sets_of_5_Sites_in_Cohort"]] <- I_0_level / 5
+    results_newline[["Mean_Establishment_Time_in_Weeks"]] <- 1 / lambda_I_0_level
+    
+    results_newline[["Expected_Recruitment_RE"]] <- expected_recruitment_re
+    results_newline[["Standard_Deviation_of_Recruitment_RE"]] <- sqrt(variance_recruitment_re)
+    results_newline[["Lower_Bound_of_Recruitment_RE"]] <- expected_recruitment_re - 
+                                                            2 * sqrt(variance_recruitment_re)
+    results_newline[["Upper_Bound_of_Recruitment_RE"]] <- expected_recruitment_re + 
+                                                            2 * sqrt(variance_recruitment_re)
+    
+    results_newline[["Expected_Recruitment_N1"]] <- expected_recruitment_n1
+    results_newline[["Standard_Deviation_of_Recruitment_N1"]] <- sqrt(variance_recruitment_n1)
+    results_newline[["Lower_Bound_of_Recruitment_N1"]] <- expected_recruitment_n1 - 
+                                                            2 * sqrt(variance_recruitment_n1)
+    results_newline[["Upper_Bound_of_Recruitment_N1"]] <- expected_recruitment_n1 + 
+                                                            2 * sqrt(variance_recruitment_n1)
+    
+    results_newline[["Expected_Recruitment_N2"]] <- expected_recruitment_n2
+    results_newline[["Standard_Deviation_of_Recruitment_N2"]] <- sqrt(variance_recruitment_n2)
+    results_newline[["Lower_Bound_of_Recruitment_N2"]] <- expected_recruitment_n2 - 
+                                                            2 * sqrt(variance_recruitment_n2)
+    results_newline[["Upper_Bound_of_Recruitment_N2"]] <- expected_recruitment_n2 + 
+                                                            2 * sqrt(variance_recruitment_n2)
+    
+    results_df <- rbind(results_df,results_newline)
+    
+  }
+  
+}
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_8.csv",row.names=FALSE)
+
+
+```
+
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment_RE, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Lower_Bound_of_Recruitment_RE, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Upper_Bound_of_Recruitment_RE, group=1)) +
+  
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment with 95% Confidence Bounds") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks")
+
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_8_re.png")
+
+```
+
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment_N1, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Lower_Bound_of_Recruitment_N1, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Upper_Bound_of_Recruitment_N1, group=1)) +
+  
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment with 95% Confidence Bounds") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks")
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_8_n1.png")
+
+```
+
+
+```{r plot expected recruitment vs cohort size, include=True}
+
+ggplot() +
+
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Expected_Recruitment_N2, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Lower_Bound_of_Recruitment_N2, group=1)) +
+  geom_line(data=results_df, aes(x=Sites_in_Cohort,y=Upper_Bound_of_Recruitment_N2, group=1)) +
+  
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Sites in Cohort") +
+  ylab("Expected Recruitment with 95% Confidence Bounds") + 
+  ggtitle("Total Recruitment per Cohort Size by Trial Length in Weeks")
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_8_n2.png")
 
 ```
