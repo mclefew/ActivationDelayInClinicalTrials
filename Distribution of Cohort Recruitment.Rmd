@@ -968,7 +968,7 @@ result_cols <- c("Length_of_Trial_in_Weeks","Needed_Recruitment",
                  "Needed_Cohort_Size")
 
 t_levels <- c(1:10) * 14
-N_levels <- c(1:1000) * 5
+N_levels <- c(1:100) * 50
 
 alpha_level <- 1
 beta_level <- 1
@@ -979,7 +979,7 @@ for(t_level in t_levels){
     
     
     needed_size <- get_needed_cohort_size(N=N_level, t = t_level, alpha=1, beta=1, rho=5/7,
-                                          confidence = 0.95, I_limit=10000)
+                                          confidence = 0.95, I_limit=1000)
     
     results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
     colnames(results_newline) <- result_cols
@@ -1018,6 +1018,208 @@ ggplot() +
 
 
 ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_9.png")
+
+
+```
+
+
+
+```{r get the smallest sized cohort to meet N recruits by time t with naive models, include=True}
+
+get_needed_cohort_size_n1 <- function(N, t, alpha, beta, confidence, I_limit){
+
+I_0_level <- 0
+needed_size_found <- FALSE
+phi_confidence <- qnorm(1-confidence)
+
+while ( (I_0_level < I_limit) & (needed_size_found == FALSE)){
+
+  I_0_level <- I_0_level + 1
+  
+  expected_recruitment <- poisson_gamma_expected_value(I_0=I_0_level,alpha=alpha, beta=beta, t=t)
+    
+  variance_recruitment <- poisson_gamma_variance(I_0=I_0_level,alpha=alpha,beta=beta, t=t)
+                                                      
+  lower_bound_recruitment <- expected_recruitment + phi_confidence * sqrt(variance_recruitment)
+  
+  if (lower_bound_recruitment > N) {
+    needed_size_found = TRUE}
+  
+}
+
+if(I_0_level < I_limit){
+  return(I_0_level) }
+else{
+  return(NULL) }  
+  
+  
+}
+
+
+
+get_needed_cohort_size_n2 <- function(N, t, alpha, beta, lambda_I_0_naive, confidence, I_limit){
+
+I_0_level <- 0
+needed_size_found <- FALSE
+phi_confidence <- qnorm(1-confidence)
+
+
+while ( (I_0_level < I_limit) & (needed_size_found == FALSE)){
+
+  I_0_level <- I_0_level + 1
+  
+  expected_recruitment <- expected_recruitment_cohort(I_0=I_0_level,alpha=alpha,beta=beta,
+                                                      lambda_I_0 = lambda_I_0_naive,
+                                                      t=t)
+    
+  variance_recruitment <- variance_recruitment_cohort(I_0=I_0_level,alpha=alpha,beta=beta,
+                                                      lambda_I_0 = lambda_I_0_naive,
+                                                      t=t)
+                                                      
+  lower_bound_recruitment <- expected_recruitment + phi_confidence * sqrt(variance_recruitment)
+  
+  if (lower_bound_recruitment > N) {
+    needed_size_found = TRUE}
+  
+}
+
+if(I_0_level < I_limit){
+  return(I_0_level) }
+else{
+  return(NULL) }  
+  
+  
+}
+
+```
+
+
+```{r test get_needed_cohort_size}
+
+needed_size_re <- get_needed_cohort_size(N=3700, t = 140, alpha=1, beta=1, rho=5/7, confidence = 0.95, I_limit=1000)
+
+
+needed_size_n1 <- get_needed_cohort_size_n1(N=3700, t=140, alpha=1, beta=1, confidence=0.95, I_limit=1000)
+
+needed_size_n2 <- get_needed_cohort_size_n2(N=3700, t=140, alpha=1, beta=1, lambda=5/7/20, confidence=0.95,
+                                            I_limit=1000)
+
+needed_size_re
+
+needed_size_n1
+
+needed_size_n2
+
+```
+
+
+
+
+```{r needed recruitment vs needed cohort size with naive, include=True}
+
+
+results_df <- data.frame()
+result_cols <- c("Length_of_Trial_in_Weeks","Needed_Recruitment",
+                 "Model","Needed_Cohort_Size")
+
+t_levels <- c(1:10) * 14
+N_levels <- c(1:100) * 50
+
+alpha_level <- 1
+beta_level <- 1
+
+for(t_level in t_levels){
+  
+  for(N_level in N_levels){
+    
+    
+    needed_size_re <- get_needed_cohort_size(N=N_level, t = t_level, alpha=1, beta=1, rho=5/7,
+                                          confidence = 0.95, I_limit=1000)
+    
+    needed_size_n1 <- get_needed_cohort_size_n1(N=N_level, t = t_level, alpha=1, beta=1,
+                                          confidence = 0.95, I_limit=1000)
+    
+    needed_size_n2 <- get_needed_cohort_size_n2(N=N_level, t = t_level, alpha=1, beta=1,
+                                                lambda_I_0_naive=5/7/20, confidence = 0.95,
+                                                I_limit=1000)
+    
+    
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Needed_Recruitment"]] <- N_level
+    results_newline[["Model"]] <- "Random Establishment"
+    
+    if (! is.null(needed_size_re)){
+      results_newline[["Needed_Cohort_Size"]] <- needed_size_re
+    }
+    else {
+      results_newline[["Needed_Cohort_Size"]] <- 0
+    }
+    
+    results_df <- rbind(results_df,results_newline)
+    
+    
+    
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Needed_Recruitment"]] <- N_level
+    results_newline[["Model"]] <- "Naive 1"
+    
+    if (! is.null(needed_size_n1)){
+      results_newline[["Needed_Cohort_Size"]] <- needed_size_n1
+    }
+    else {
+      results_newline[["Needed_Cohort_Size"]] <- 0
+    }
+    
+    results_df <- rbind(results_df,results_newline)
+    
+    
+    results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+    colnames(results_newline) <- result_cols
+    
+    results_newline[["Length_of_Trial_in_Weeks"]] <- t_level / 7
+    results_newline[["Needed_Recruitment"]] <- N_level
+    results_newline[["Model"]] <- "Naive 2"
+    
+    if (! is.null(needed_size_n2)){
+      results_newline[["Needed_Cohort_Size"]] <- needed_size_n2
+    }
+    else {
+      results_newline[["Needed_Cohort_Size"]] <- 0
+    }
+    
+    results_df <- rbind(results_df,results_newline)
+    
+    
+  }
+  
+}
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_10.csv",row.names=FALSE)
+
+
+```
+
+
+```{r plot expected recruitment vs cohort size with naive, include=True}
+
+ggplot() +
+  geom_line(data=results_df, aes(x=Needed_Recruitment,y=Needed_Cohort_Size, group=Model, color=Model)) +
+  facet_grid(Length_of_Trial_in_Weeks ~ .) +
+  xlab("Required Recruitment") +
+  ylab("Required Cohort Size with 95% Confidence") + 
+  ggtitle("Required Cohort Size for a Given Required Recruitment and Trial Length in Weeks")
+
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_10.png")
 
 
 ```
