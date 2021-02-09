@@ -53,6 +53,7 @@ I_0 [\mu - \mu^2]
 ```{r import libraries, include=TRUE}
 
 library(ggplot2)
+library(scales)
 
 ```
 
@@ -186,7 +187,7 @@ alpha_levels <- c(2,4)
 beta_levels <- c(1/5, 2/5)
 lambda_I_0_levels <- c(1/30, 1/60)
 t_levels <- c(120, 240)
-n_sims_level <- 1000000
+n_sims_level <- 10000
 
 for (I_0_level in I_0_levels){
   
@@ -1125,8 +1126,8 @@ result_cols <- c("Length_of_Trial_in_Weeks","Needed_Recruitment",
 t_levels <- c(1:10) * 14
 N_levels <- c(1:100) * 50
 
-alpha_level <- 1
-beta_level <- 1
+alpha_level <- 100
+beta_level <- 10
 
 for(t_level in t_levels){
   
@@ -1221,5 +1222,252 @@ ggplot() +
 
 ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_10.png")
 
+
+```
+
+
+
+Now, assume there is some cost to the delay of the study, and some cost to the startup of additional sites. Let T_d be the trial deadline, let c1 be the cost per site, and let c2 be the cost per day past the trial deadline.
+
+```{r function to simulate recruitment and get delay costs}
+
+simulate_cost_by_site_activation <- function(N, I, lambda_I, alpha, beta, n_sims=1){
+    
+  activation_times <- rexp(n = I * n_sims, rate=lambda_I)
+  recruitment_rates <- rgamma(n = I * n_sims, shape=alpha, rate=beta)
+  recruited <- data.frame(matrix(unlist(rep(0,I*n_sims)), ncol=n_sims, byrow=FALSE))
+  recruit_sums <- colSums(recruited)
+  
+  completed <- recruit_sums >= N
+  completed_prev <- rep(FALSE, n_sims)
+  day_completed <- rep(0,n_sims)
+  
+  day <- 0
+  
+  while(sum(completed) < n_sims){
+    
+    activated <- activation_times < day
+    site_stopped <- rep(completed, each=I)
+    
+    recruitments_day <- activated * (! site_stopped) * rpois(n=I * n_sims, lambda = recruitment_rates)
+    recruitments_day_df <- data.frame(matrix(unlist(recruitments_day), ncol=n_sims, byrow=FALSE))
+    recruited <- recruited + recruitments_day_df
+    recruit_sums <- colSums(recruited)
+    completed <- recruit_sums >= N
+  
+    day <- day + 1  
+    
+    for(i in 1:n_sims){
+      if (completed[i] && ! completed_prev[i]){
+        day_completed[i] = day
+        completed_prev[i] = TRUE
+      }
+    }
+    
+  }
+  
+  activated_df <- data.frame(matrix(unlist(activated), ncol=n_sims, byrow=FALSE))
+  
+  sites_activated <- colSums(activated_df)
+  
+  
+  sim_results <- data.frame(matrix(unlist(c(
+                                      rep(I,n_sims),
+                                      sites_activated,
+                                      day_completed,
+                                      rep(N,n_sims))), ncol=4, byrow=FALSE))
+  colnames(sim_results) <- c("Sites_Initiated","Sites_Activated",
+                             "Day_Completed","Required_Recruitment")
+
+  return(sim_results)  
+}
+
+```
+
+
+```{r get simulations at multiple values of activation and delay cost}
+
+results_df <- data.frame()
+result_cols <- c("Length_of_Trial_in_Weeks",
+                 "Needed_Recruitment",
+                 "Activation_Cost_per_Site",
+                 "Delay_Cost_per_Week",
+                 "Cohort_Size",
+                 "Alpha",
+                 "Beta",
+                 "Mean_Activation_Time_in_Weeks",
+                 "Average_Sites_Activated",
+                 "Average_Day_Completed",
+                 "Site_Activation_Cost",
+                 "Average_Delay_Cost",
+                 "Average_Total_Cost",
+                 "Number_Simulations")
+
+activation_cost_levels <- c(25000, 50000, 75000)
+delay_cost_levels <- c(50000 / 7,100000 / 7,150000 / 7)
+cohort_size_levels <- c(1:20) * 10
+
+alpha_level <- 10
+beta_level <- 4
+
+N_level <- 30000
+T_d_level <- 20 * 7
+
+n_sims_level <- 50000
+
+one_site_activation_time = 4*7/5
+
+ptm <- proc.time()
+
+for(cohort_size_level in cohort_size_levels){
+      
+  mean_activation_time = one_site_activation_time * cohort_size_level
+  
+  sim_results <- simulate_cost_by_site_activation(N=N_level, I=cohort_size_level,
+                                                        lambda_I = 1/mean_activation_time,
+                                                        alpha=alpha_level, beta=beta_level,
+                                                        n_sims=n_sims_level
+                                                        )
+
+  
+
+  for(activation_cost_level in activation_cost_levels){
+  
+    for(delay_cost_level in delay_cost_levels){
+      
+      sim_results["Activation_Cost"] <- cohort_size_level * activation_cost_level
+      
+      sim_results["Delay_Cost"] <- ifelse(sim_results[["Day_Completed"]] > T_d_level,
+                                          sim_results[["Day_Completed"]] - T_d_level,
+                                          0) * delay_cost_level
+      
+      sim_results["Total_Cost"] <- sim_results["Activation_Cost"] + sim_results["Delay_Cost"]
+      
+      sim_means <- colMeans(sim_results)
+    
+      results_newline <- data.frame(matrix(ncol=length(result_cols),nrow=1))
+      colnames(results_newline) <- result_cols
+    
+      results_newline[["Length_of_Trial_in_Weeks"]] <- T_d_level / 7
+      results_newline[["Needed_Recruitment"]] <- N_level
+      results_newline[["Activation_Cost_per_Site"]] <- activation_cost_level
+      results_newline[["Delay_Cost_per_Week"]] <- delay_cost_level * 7
+      results_newline[["Alpha"]] <- alpha_level
+      results_newline[["Beta"]] <- beta_level
+      results_newline[["Mean_Activation_Time_in_Weeks"]] <- mean_activation_time / 7
+      results_newline[["Cohort_Size"]] <- cohort_size_level
+      results_newline[["Average_Sites_Activated"]] <- sim_means["Sites_Activated"]
+      results_newline[["Average_Day_Completed"]] <- sim_means["Day_Completed"]
+      results_newline[["Site_Activation_Cost"]] <- sim_means["Activation_Cost"]
+      results_newline[["Average_Delay_Cost"]] <- sim_means["Delay_Cost"]
+      results_newline[["Average_Total_Cost"]] <- sim_means["Total_Cost"]
+      results_newline[["Number_Simulations"]] <- n_sims_level
+    
+      
+      results_df <- rbind(results_df,results_newline)
+      
+    }
+  }
+  
+  
+  
+}
+
+proc.time() - ptm
+
+
+write.csv(results_df, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_11.csv",row.names=FALSE)
+
+
+
+```
+
+
+```{r plot results of delay cost simulation}
+
+
+results_df_delay <- cbind("Delay",
+                          results_df[c("Cohort_Size",
+                                       "Activation_Cost_per_Site",
+                                       "Delay_Cost_per_Week",
+                                       "Average_Delay_Cost")])
+colnames(results_df_delay) <- c("Cost_Type",
+                                "Cohort_Size",
+                                "Activation_Cost_per_Site",
+                                "Delay_Cost_per_Week",
+                                "Average_Cost")
+
+
+results_df_activation <- cbind("Activation",
+                          results_df[c("Cohort_Size",
+                                       "Activation_Cost_per_Site",
+                                       "Delay_Cost_per_Week",
+                                       "Site_Activation_Cost")])
+colnames(results_df_activation) <- c("Cost_Type",
+                                "Cohort_Size",
+                                "Activation_Cost_per_Site",
+                                "Delay_Cost_per_Week",
+                                "Average_Cost")
+
+results_df_total <- cbind("Total",
+                          results_df[c("Cohort_Size",
+                                       "Activation_Cost_per_Site",
+                                       "Delay_Cost_per_Week",
+                                       "Average_Total_Cost")])
+colnames(results_df_total) <- c("Cost_Type",
+                                "Cohort_Size",
+                                "Activation_Cost_per_Site",
+                                "Delay_Cost_per_Week",
+                                "Average_Cost")
+
+results_df_cost_type <- rbind(results_df_delay,
+                              results_df_activation,
+                              results_df_total)
+
+activation_cost_labels <- paste(dollar_format()(activation_cost_levels),"per Site")
+names(activation_cost_labels) <- activation_cost_levels
+
+delay_cost_labels <- paste(dollar_format()(delay_cost_levels * 7),"per Week")
+names(delay_cost_labels) <- delay_cost_levels * 7
+
+ggplot() +
+  geom_line(data=results_df_cost_type, aes(x=Cohort_Size,y=Average_Cost, group=Cost_Type, color=Cost_Type)) +
+  facet_grid(Activation_Cost_per_Site ~ Delay_Cost_per_Week,
+             labeller=labeller(Activation_Cost_per_Site=activation_cost_labels,
+                               Delay_Cost_per_Week=delay_cost_labels)) +
+  xlab("Initiated Sites") +
+  ylab("Average Cost") +
+  scale_y_continuous(labels=scales::dollar_format())
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_11_a.png")
+  
+```
+
+
+```{r plot delay}
+
+results_df_1_param <- results_df[which(results_df["Activation_Cost_per_Site"] == activation_cost_levels[1]
+                                 & results_df["Delay_Cost_per_Week"] == delay_cost_levels[1]*7),]
+
+ggplot() +
+  geom_line(data=results_df_1_param, aes(x=Cohort_Size,y=Average_Day_Completed)) +
+  xlab("Initiated Sites") +
+  ylab("Days to Completion") + 
+  ggtitle("Days to Complete Trial")
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_11_b.png")
+
+```
+
+
+```{r plot site activation}
+
+ggplot() +
+  geom_line(data=results_df_1_param, aes(x=Cohort_Size,y=Average_Sites_Activated)) +
+  xlab("Initiated Sites") +
+  ylab("Activated Sites") + 
+  ggtitle("Sites Activated Before Trial Completion")
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_11_c.png")
 
 ```
