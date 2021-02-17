@@ -237,6 +237,7 @@ ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Rec
 
 ```{r get optimal costs}
 
+results_df <- read.csv(file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_11_rep.csv")
 
 optimal_sets <- results_df %>% 
     group_by(Length_of_Trial_in_Weeks,
@@ -246,22 +247,31 @@ optimal_sets <- results_df %>%
              Activation_Cost_per_Site,
              Delay_Cost_per_Week) %>% 
     slice(which.min(Average_Total_Cost)) %>%
-    rename(Optimal_Cohort_Size=Cohort_Size)
-
-
-
-optimal_sets[c("Activation_Cost_per_Site","Delay_Cost_per_Week",
-               "Optimal_Cohort_Size",
+    rename(Optimal_Cohort_Size=Cohort_Size) %>%
+    select(c("Length_of_Trial_in_Weeks","Needed_Recruitment",
+             "Alpha","Beta","Activation_Cost_per_Site",
+             "Delay_Cost_per_Week","Optimal_Cohort_Size",
              "Average_Day_Completed","Average_Delay_Cost",
-             "Site_Activation_Cost","Average_Total_Cost")]    
+             "Site_Activation_Cost","Average_Total_Cost"))
+
+optimal_sets
+
+write.csv(optimal_sets, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_11_opt.csv")
 
 ```
 
 
 ```{r plot delay}
 
-results_df_1_param <- results_df[which(results_df["Activation_Cost_per_Site"] == activation_cost_levels[1]
-                                 & results_df["Delay_Cost_per_Week"] == delay_cost_levels[1]*7),]
+results_df_1_param <- results_df %>%
+                      group_by(Length_of_Trial_in_Weeks,
+                               Needed_Recruitment,
+                               Alpha,
+                               Beta,
+                               Cohort_Size) %>%
+                      summarize(Average_Day_Completed = mean(Average_Day_Completed),
+                                Average_Sites_Activated = mean(Average_Sites_Activated))
+
 
 ggplot() +
   geom_line(data=results_df_1_param, aes(x=Cohort_Size,y=Average_Day_Completed)) +
@@ -447,6 +457,27 @@ ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Rec
   
 ```
 
+```{r day completed without activation delay}
+
+results_df_1_param <- results_df %>%
+                      group_by(Length_of_Trial_in_Weeks,
+                               Needed_Recruitment,
+                               Alpha,
+                               Beta,
+                               Cohort_Size) %>%
+                      summarize(Average_Day_Completed = mean(Average_Day_Completed),
+                                Average_Sites_Activated = mean(Average_Sites_Activated))
+
+
+ggplot() +
+  geom_line(data=results_df_1_param, aes(x=Cohort_Size,y=Average_Day_Completed)) +
+  xlab("Initiated Sites") +
+  ylab("Days to Completion") + 
+  ggtitle("Days to Complete Trial - Instantaneous Activation")
+
+ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_12_b.png")
+
+```
 
 
 ```{r optimal without activation delay}
@@ -458,19 +489,24 @@ optimal_sets_no_delay <- results_df %>%
              Beta,
              Activation_Cost_per_Site,
              Delay_Cost_per_Week) %>% 
-    slice(which.min(Average_Total_Cost))
-
-
-
-optimal_sets_no_delay[c("Activation_Cost_per_Site","Delay_Cost_per_Week",
+    slice(which.min(Average_Total_Cost)) %>%
+    select(c("Length_of_Trial_in_Weeks",
+             "Needed_Recruitment",
+             "Alpha",
+             "Beta",
+             "Activation_Cost_per_Site","Delay_Cost_per_Week",
                "Cohort_Size",
              "Average_Day_Completed","Average_Delay_Cost",
-             "Site_Activation_Cost","Average_Total_Cost")]    
+             "Site_Activation_Cost","Average_Total_Cost"))
+
+optimal_sets_no_delay
+
+write.csv(optimal_sets_no_delay, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_12_opt.csv",row.names=FALSE)
 
 ```
 
 
-If the optimal cohort size is selected based on the assumption that there is no activation delay, and then played out according to the activation delay dynamics described in the previous simulation, what will be the anticipated and 
+If the optimal cohort size is selected based on the assumption that there is no activation delay, and then played out according to the activation delay dynamics described in the previous simulation, what will be the anticipated and actual costs
 
 ```{r no delay anticipated vs actual cost}
 
@@ -536,6 +572,8 @@ optimal_sets_no_delay_3$Optimal_Minus_Actual_Cost <- optimal_sets_no_delay_3$Act
                                                         optimal_sets_no_delay_3$Optimal_Total_Cost_Delay
 
 optimal_sets_no_delay_3
+
+write.csv(optimal_sets_no_delay_3, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_12_opt_2.csv",row.names=FALSE)
 
 ```
 
@@ -819,7 +857,7 @@ for(activation_cost_level in activation_cost_levels){
       
       for(cohort_size_level in cohort_size_levels[cohort_size_levels >= cohort_size_no_delay]){
         
-        mean_activation_time_additional = one_site_activation_time * (cohort_size_level-cohort_size_no_delay)
+        mean_activation_time_additional = one_site_activation_time * (cohort_size_level)
       
         sim_results <- simulate_cost_by_site_activation_midstream(N=N_level, I_original=cohort_size_no_delay,
                                                         lambda_I_original = 1/mean_activation_time_original,
@@ -947,4 +985,47 @@ ggplot() +
 
 ggsave("C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_recruitment_study_14.png")
   
+```
+
+
+```{r optimal after 5 weeks on no delay assumption}
+
+
+optimal_sets_recalc <- results_df %>% 
+  
+                      group_by(Length_of_Trial_in_Weeks,
+                               Needed_Recruitment,
+                               Alpha,
+                               Beta,
+                               Activation_Cost_per_Site,
+                               Delay_Cost_per_Week) %>% 
+  
+                      slice(which.min(Average_Total_Cost))
+
+
+optimal_sets_recalc_2 <- merge(x = optimal_sets_recalc[c("Activation_Cost_per_Site",
+                                                             "Delay_Cost_per_Week",
+                                                             "Cohort_Size",
+                                                             "Average_Total_Cost")],
+                                 y = optimal_sets_delay[c("Activation_Cost_per_Site",
+                                                             "Delay_Cost_per_Week",
+                                                             "Cohort_Size",
+                                                             "Average_Total_Cost")],
+                                 by = c("Activation_Cost_per_Site",
+                                        "Delay_Cost_per_Week"),
+                                 all.x = TRUE) %>%
+  
+                          rename(Optimal_Cohort_Size_Recalc = Cohort_Size.x,
+                                 Optimal_Cohort_Size_From_Start = Cohort_Size.y,
+                                 Optimal_Total_Cost_Recalc = Average_Total_Cost.x,
+                                 Optimal_Total_Cost_From_Start = Average_Total_Cost.y)
+
+
+optimal_sets_recalc_2$Optimal_Minus_Recalc_Cost <- optimal_sets_recalc_2$Optimal_Total_Cost_Recalc -
+                                                      optimal_sets_recalc_2$Optimal_Total_Cost_From_Start
+
+optimal_sets_recalc_2
+
+write.csv(optimal_sets_recalc_2, file = "C:/Users/mclef/Documents/Research/Clinical Trials/sim results/Cohort Recruitment Distribution/Exponential Establishment/cohort_reruitment_study_14_opt.csv",row.names=FALSE)
+
 ```
