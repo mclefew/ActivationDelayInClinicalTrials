@@ -1,0 +1,463 @@
+---
+title: "Distribution of Stop Time"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r import libraries, include=TRUE}
+
+library(ggplot2)
+library(scales)
+library(dplyr)    
+library(Rcpp)
+library(lamW)
+
+```
+
+
+```{r function to simulate recruitment and get delay costs}
+
+simulate_site_activation_manual <- function(N, I, lambda_I, alpha, beta, n_sims=1){
+    
+  activation_times <- rexp(n = I * n_sims, rate=lambda_I)
+  recruitment_rates <- rgamma(n = I * n_sims, shape=alpha, rate=beta)
+  recruited <- data.frame(matrix(unlist(rep(0,I*n_sims)), ncol=n_sims, byrow=FALSE))
+  recruit_sums <- colSums(recruited)
+  
+  completed <- recruit_sums >= N
+  completed_prev <- rep(FALSE, n_sims)
+  day_completed <- rep(0,n_sims)
+  
+  day <- 0
+  
+  while(sum(completed) < n_sims){
+    
+    activated <- activation_times < day
+    site_stopped <- rep(completed, each=I)
+    
+    recruitments_day <- activated * (! site_stopped) * rpois(n=I * n_sims, lambda = recruitment_rates)
+    recruitments_day_df <- data.frame(matrix(unlist(recruitments_day), ncol=n_sims, byrow=FALSE))
+    recruited <- recruited + recruitments_day_df
+    recruit_sums <- colSums(recruited)
+    completed <- recruit_sums >= N
+  
+    day <- day + 1  
+    
+    for(i in 1:n_sims){
+      if (completed[i] && ! completed_prev[i]){
+        day_completed[i] = day
+        completed_prev[i] = TRUE
+      }
+    }
+    
+  }
+  
+  activated_df <- data.frame(matrix(unlist(activated), ncol=n_sims, byrow=FALSE))
+  
+  sites_activated <- colSums(activated_df)
+  
+  
+  sim_results <- data.frame(matrix(unlist(c(
+                                      rep(I,n_sims),
+                                      sites_activated,
+                                      day_completed,
+                                      rep(N,n_sims))), ncol=4, byrow=FALSE))
+  colnames(sim_results) <- c("Sites_Initiated","Sites_Activated",
+                             "Day_Completed","Required_Recruitment")
+
+  return(sim_results)  
+}
+
+```
+
+
+```{r function to simulate recruitment and get delay costs using NSPP}
+
+NSPP_Inverse_Rate <- function(t, I, lambda_I, alpha, beta){
+  
+  term_1 <- (beta * t * lambda_I) / (alpha * I)
+    
+  term_2 <- -exp(-(term_1+1))
+    
+  term_3 <- lambertW0(term_2) + term_1 + 1
+  
+  inverse_rate_result <- term_3 / lambda_I
+  
+  return(inverse_rate_result)
+  
+}
+
+simulate_site_activation_NSPP <- function(N, I, lambda_I, alpha, beta, n_sims=1){
+  
+  gamma_draws <- rgamma(n = n_sims, shape = N, rate = 1)
+  
+  time_draws <- NSPP_Inverse_Rate(gamma_draws, I=I, lambda_I=lambda_I, alpha=alpha, beta=beta)
+  
+  
+  sim_results <- data.frame(matrix(unlist(c(
+                                      rep(I,n_sims),
+                                      time_draws,
+                                      rep(N,n_sims))), ncol=3, byrow=FALSE))
+  colnames(sim_results) <- c("Sites_Initiated"
+                             , "Day_Completed"
+                             , "Required_Recruitment")
+  
+  return(sim_results)
+
+}
+
+```
+
+
+
+
+```{r function to simulate recruitment and get delay costs using NSPP}
+
+NSPP_Inverse_Rate_2 <- function(t_val, I, lambda_I, alpha, beta){
+  
+  activation_times <- rexp(n = I , rate=lambda_I)
+  recruitment_rates <- rgamma(n = I , shape=alpha, rate=beta)
+  
+  
+  term_1 <- sum(recruitment_rates * activation_times * (activation_times < t_val))
+  
+  term_2 <- sum(recruitment_rates * (activation_times < t_val))
+    
+  inverse_rate_result <- (t_val + term_1) / term_2
+  
+  return(inverse_rate_result)
+  
+}
+
+simulate_site_activation_NSPP_2 <- function(N, I, lambda_I, alpha, beta, n_sims=1){
+  
+  gamma_draws <- rgamma(n = n_sims, shape = N, rate = 1)
+  
+  time_draws <- sapply(gamma_draws,NSPP_Inverse_Rate_2,I=I, lambda_I=lambda_I, alpha=alpha, beta=beta)
+  
+  
+  sim_results <- data.frame(matrix(unlist(c(
+                                      rep(I,n_sims),
+                                      time_draws,
+                                      rep(N,n_sims))), ncol=3, byrow=FALSE))
+  colnames(sim_results) <- c("Sites_Initiated"
+                             , "Day_Completed"
+                             , "Required_Recruitment")
+  
+  return(sim_results)
+
+}
+
+```
+
+
+
+```{r}
+
+alpha_level <- 2
+beta_level <- 4
+
+N_level <- 3000
+T_d_level <- 20 * 7
+
+n_sims_level <- 1000
+
+one_site_activation_time = 4*7/5
+
+cohort_size_level <- 50
+
+mean_activation_time = one_site_activation_time * cohort_size_level
+
+sim_results_manual <- simulate_site_activation_manual(N=N_level
+                                                      , I=cohort_size_level
+                                                      , lambda_I = 1/mean_activation_time
+                                                      , alpha=alpha_level
+                                                      , beta=beta_level
+                                                      , n_sims=n_sims_level
+                                                      )
+
+colMeans(sim_results_manual)
+
+
+sim_results_NSPP <- simulate_site_activation_NSPP(N=N_level
+                                                  , I=cohort_size_level
+                                                  , lambda_I = 1/mean_activation_time
+                                                  , alpha=alpha_level
+                                                  , beta=beta_level
+                                                  , n_sims=n_sims_level
+                                                  )
+
+colMeans(sim_results_NSPP)
+
+
+sim_results_NSPP_2 <- simulate_site_activation_NSPP_2(N=N_level
+                                                  , I=cohort_size_level
+                                                  , lambda_I = 1/mean_activation_time
+                                                  , alpha=alpha_level
+                                                  , beta=beta_level
+                                                  , n_sims=n_sims_level
+                                                  )
+
+colMeans(sim_results_NSPP_2)
+
+```
+
+
+
+```{r plot manual vs NSPP distribution}
+
+dens_manual=density(sim_results_manual$Day_Completed)
+# Plot y-values scaled by number of observations against x values
+plot(dens_manual$x,length(sim_results_manual$Day_Completed)*dens_manual$y,type="l",xlab="Value",ylab="Count estimate")
+
+
+dens_NSPP=density(sim_results_NSPP$Day_Completed)
+# Plot y-values scaled by number of observations against x values
+plot(dens_NSPP$x,length(sim_results_NSPP$Day_Completed)*dens_NSPP$y,type="l",xlab="Value",ylab="Count estimate")
+
+
+dens_NSPP_2=density(sim_results_NSPP_2$Day_Completed)
+# Plot y-values scaled by number of observations against x values
+plot(dens_NSPP_2$x,length(sim_results_NSPP_2$Day_Completed)*dens_NSPP_2$y,type="l",xlab="Value",ylab="Count estimate")
+
+```
+
+
+```{r simulate for a single set of activation times and recruitment rates}
+
+alpha <- 2
+beta <- 4
+
+N <- 3000
+
+n_sims <- 1000
+
+one_site_activation_time = 4*7/5
+
+I <- 50
+
+mean_activation_time = one_site_activation_time * I
+
+lambda_I <- 1 / mean_activation_time
+
+activation_times <- rexp(n = I, rate=lambda_I)
+recruitment_rates <- rgamma(n = I , shape=alpha, rate=beta)
+
+
+###############################################
+
+recruited <- data.frame(matrix(unlist(rep(0,I*n_sims)), ncol=n_sims, byrow=FALSE))
+recruit_sums <- colSums(recruited)
+
+completed <- recruit_sums >= N
+completed_prev <- rep(FALSE, n_sims)
+day_completed <- rep(0,n_sims)
+
+day <- 0
+
+while(sum(completed) < n_sims){
+  
+  activated <- rep(activation_times, n_sims) < day
+  site_stopped <- rep(completed, each=I)
+  
+  recruitments_day <- activated * (! site_stopped) * rpois(n=I * n_sims, lambda = recruitment_rates)
+  recruitments_day_df <- data.frame(matrix(unlist(recruitments_day), ncol=n_sims, byrow=FALSE))
+  recruited <- recruited + recruitments_day_df
+  recruit_sums <- colSums(recruited)
+  completed <- recruit_sums >= N
+
+  day <- day + 1  
+  
+  for(i in 1:n_sims){
+    if (completed[i] && ! completed_prev[i]){
+      day_completed[i] = day
+      completed_prev[i] = TRUE
+    }
+  }
+  
+}
+
+activated_df <- data.frame(matrix(unlist(activated), ncol=n_sims, byrow=FALSE))
+
+sites_activated <- colSums(activated_df)
+
+
+sim_results <- data.frame(matrix(unlist(c(
+                                    rep(I,n_sims),
+                                    sites_activated,
+                                    day_completed,
+                                    rep(N,n_sims))), ncol=4, byrow=FALSE))
+colnames(sim_results) <- c("Sites_Initiated","Sites_Activated",
+                           "Day_Completed","Required_Recruitment")
+
+
+
+###############################################
+
+
+
+NSPP_Intensity <- function(t_val, activation_times, recruitment_rates){
+  return(
+    
+    sum((t_val-activation_times) * recruitment_rates * (activation_times < t_val))
+    
+  )
+}
+
+NSPP_Intensity_dif <- function(t_val_1, t_val_2, activation_times, recruitment_rates){
+  return(abs(t_val_2 - NSPP_Intensity(t_val_1, activation_times, recruitment_rates)))
+}
+
+NSPP_Inverse_Rate_3 <- function(t_val, activation_times, recruitment_rates,max_t){
+  
+  inverse_rate_result <- optimize(f=NSPP_Intensity_dif
+                                  ,t_val_2 = t_val
+                                  ,activation_times=activation_times
+                                  ,recruitment_rates=recruitment_rates
+                                  ,interval=c(0,max_t)
+                                  ,maximum = FALSE)
+  
+  return(inverse_rate_result$minimum)
+  
+}
+
+
+gamma_draws <- rgamma(n = n_sims, shape = N, rate = 1)
+
+time_draws <- sapply(gamma_draws, function(t_gamma) NSPP_Inverse_Rate_3(t_val=t_gamma
+                                                                         , activation_times=activation_times
+                                                                         , recruitment_rates=recruitment_rates
+                                                                         , max_t = 800))
+
+```
+
+
+```{r}
+
+t_range <- 1:400
+intensity <- sapply(t_range
+                    , NSPP_Intensity
+                    , activation_times=activation_times
+                    , recruitment_rates=recruitment_rates)
+
+plot(t_range, intensity)
+
+```
+
+
+```{r}
+
+dens_manual=density(sim_results$Day_Completed)
+# Plot y-values scaled by number of observations against x values
+plot(dens_manual$x,length(sim_results$Day_Completed)*dens_manual$y,type="l",xlab="Value",ylab="Count estimate")
+
+
+dens_NSPP=density(time_draws)
+# Plot y-values scaled by number of observations against x values
+plot(dens_NSPP$x,length(time_draws)*dens_NSPP$y,type="l",xlab="Value",ylab="Count estimate")
+
+
+
+```
+
+
+```{r}
+
+NSPP_Inverse_Rate_4 <- function(t_gamma, I, lambda_I, alpha, beta, max_t){
+  
+  activation_times <- rexp(n = I , rate=lambda_I)
+  recruitment_rates <- rgamma(n = I , shape=alpha, rate=beta)
+  
+  
+  inverse_rate_result <- optimize(f=NSPP_Intensity_dif
+                                  ,t_val_2 = t_gamma
+                                  ,activation_times=activation_times
+                                  ,recruitment_rates=recruitment_rates
+                                  ,interval=c(0,max_t)
+                                  ,maximum = FALSE)
+  
+  return(inverse_rate_result$minimum)
+  
+}
+
+simulate_site_activation_NSPP_4 <- function(N, I, lambda_I, alpha, beta, max_t, n_sims=1){
+  
+  gamma_draws <- rgamma(n = n_sims, shape = N, rate = 1)
+  
+  time_draws <- sapply(gamma_draws,NSPP_Inverse_Rate_4, I=I, lambda_I=lambda_I, alpha=alpha, beta=beta, max_t=max_t)
+  
+  
+  sim_results <- data.frame(matrix(unlist(c(
+                                      rep(I,n_sims),
+                                      time_draws,
+                                      rep(N,n_sims))), ncol=3, byrow=FALSE))
+  colnames(sim_results) <- c("Sites_Initiated"
+                             , "Day_Completed"
+                             , "Required_Recruitment")
+  
+  return(sim_results)
+
+}
+
+```
+
+
+
+
+```{r}
+
+alpha_level <- 2
+beta_level <- 4
+
+N_level <- 3000
+T_d_level <- 20 * 7
+
+n_sims_level <- 1000
+
+one_site_activation_time = 4*7/5
+
+cohort_size_level <- 50
+
+mean_activation_time = one_site_activation_time * cohort_size_level
+
+sim_results_manual <- simulate_site_activation_manual(N=N_level
+                                                      , I=cohort_size_level
+                                                      , lambda_I = 1/mean_activation_time
+                                                      , alpha=alpha_level
+                                                      , beta=beta_level
+                                                      , n_sims=n_sims_level
+                                                      )
+
+colMeans(sim_results_manual)
+
+
+sim_results_NSPP <- simulate_site_activation_NSPP_4(N=N_level
+                                                  , I=cohort_size_level
+                                                  , lambda_I = 1/mean_activation_time
+                                                  , alpha=alpha_level
+                                                  , beta=beta_level
+                                                  , n_sims=n_sims_level
+                                                  , max_t = 800
+                                                  )
+
+colMeans(sim_results_NSPP)
+
+
+```
+
+
+```{r}
+
+dens_manual=density(sim_results_manual$Day_Completed)
+# Plot y-values scaled by number of observations against x values
+plot(dens_manual$x,length(sim_results_manual$Day_Completed)*dens_manual$y,type="l",xlab="Value",ylab="Count estimate")
+
+
+dens_NSPP=density(sim_results_NSPP$Day_Completed)
+# Plot y-values scaled by number of observations against x values
+plot(dens_NSPP$x,length(sim_results_NSPP$Day_Completed)*dens_NSPP$y,type="l",xlab="Value",ylab="Count estimate")
+
+```
