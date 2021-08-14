@@ -1,1 +1,1 @@
-# ClinicalTrialSimulations
+# ActivationDelayInClinicalTrials
